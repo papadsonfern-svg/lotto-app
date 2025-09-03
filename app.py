@@ -14,11 +14,19 @@ if "bets" not in st.session_state:
 if "blocked_numbers" not in st.session_state:
     st.session_state.blocked_numbers = {}
 
+if "normal_limit" not in st.session_state:
+    st.session_state.normal_limit = 10000  # ค่าเริ่มต้น
+
 # -------------------------
-# Sidebar: ตั้งค่าเลขอั้น
+# Sidebar: ตั้งค่า
 # -------------------------
 with st.sidebar:
-    st.header("⚙️ ตั้งค่าเลขอั้น")
+    st.header("⚙️ ตั้งค่า")
+
+    # ✅ limit ของเลขปกติ
+    st.session_state.normal_limit = st.number_input("ยอดสูงสุดของเลขปกติ", min_value=0, step=100, value=st.session_state.normal_limit)
+
+    st.subheader("เลขอั้น")
     blocked_num = st.text_input("เลขอั้น (เช่น 19 หรือ 123)")
     blocked_limit = st.number_input("ยอดสูงสุดของเลขอั้น", min_value=0, step=10)
 
@@ -41,7 +49,6 @@ with st.sidebar:
             })
         df_blocked = pd.DataFrame(blocked_data)
 
-        # ✅ ใส่สีแดงถ้าเลขเป็นเลขอั้น และถ้าเกินยอด
         def highlight(val, col_name):
             if col_name == "เลข":
                 return "color: red; font-weight: bold;"
@@ -77,14 +84,15 @@ with col1:
             if not number.isdigit():
                 st.error("❌ ต้องกรอกเป็นตัวเลขเท่านั้น")
             else:
+                # ✅ เช็ค limit (เลขอั้น vs เลขปกติ)
                 if number in st.session_state.blocked_numbers:
                     max_limit = st.session_state.blocked_numbers[number]
-                    already = sum(b["ยอดซื้อ"] for b in st.session_state.bets if b["เลข"] == number)
-                    if already + amount > max_limit:
-                        st.error(f"❌ เลข {number} เป็นเลขอั้น รับได้อีกไม่เกิน {max_limit - already} บาท")
-                    else:
-                        st.session_state.bets.append({"เลข": number, "ประเภท": bet_type, "ยอดซื้อ": amount})
-                        st.success(f"✅ รับโพย {number} ({bet_type}) {amount} บาท")
+                else:
+                    max_limit = st.session_state.normal_limit
+
+                already = sum(b["ยอดซื้อ"] for b in st.session_state.bets if b["เลข"] == number)
+                if already + amount > max_limit:
+                    st.error(f"❌ เลข {number} เกินยอดที่รับได้ (สูงสุด {max_limit} บาท)")
                 else:
                     st.session_state.bets.append({"เลข": number, "ประเภท": bet_type, "ยอดซื้อ": amount})
                     st.success(f"✅ รับโพย {number} ({bet_type}) {amount} บาท")
@@ -96,11 +104,35 @@ with col2:
     st.markdown("### 📊 โพยทั้งหมด")
     if st.session_state.bets:
         df = pd.DataFrame(st.session_state.bets)
-        st.dataframe(df, use_container_width=True)
+
+        # ✅ ใส่สีแดง
+        def style_bets(row):
+            num = row["เลข"]
+            amt = row["ยอดซื้อ"]
+            styles = [""] * len(row)
+
+            if num in st.session_state.blocked_numbers:
+                max_limit = st.session_state.blocked_numbers[num]
+            else:
+                max_limit = st.session_state.normal_limit
+
+            already = sum(b["ยอดซื้อ"] for b in st.session_state.bets if b["เลข"] == num)
+            if already > max_limit:
+                styles = ["background-color: red; color: white; font-weight: bold;"] * len(row)
+            elif num in st.session_state.blocked_numbers:
+                for i, col in enumerate(df.columns):
+                    if col == "เลข":
+                        styles[i] = "color: red; font-weight: bold;"
+
+            return styles
+
+        st.dataframe(
+            df.style.apply(style_bets, axis=1),
+            use_container_width=True
+        )
 
         # รวมเลขซ้ำ
         st.markdown("### 🔄 รวมเลขซ้ำแยกตามประเภท")
-
         for cat in ["2ตัวบน", "2ตัวล่าง", "3ตัวเต็ง", "3ตัวโต๊ด"]:
             cat_df = df[df["ประเภท"] == cat].groupby("เลข", as_index=False).sum()
             if not cat_df.empty:
