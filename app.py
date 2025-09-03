@@ -1,53 +1,89 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 
-st.set_page_config("เจ้ามือหวยออนไลน์", layout="wide")
+st.set_page_config(page_title="โปรแกรมเจ้ามือหวยออนไลน์", layout="centered")
 
-if "orders" not in st.session_state:
-    st.session_state.orders = pd.DataFrame(columns=["ประเภท","เลข","ยอดซื้อ","สถานะ","เวลา"])
+st.title("💸 โปรแกรมเจ้ามือหวยออนไลน์")
 
-# ตั้งค่า
-st.sidebar.header("⚙️ ตั้งค่า")
-percent = st.sidebar.number_input("เปอร์เซ็นต์หัก (%)", 0, 100, 20)
-block2 = st.sidebar.text_input("เลขอั้น 2 ตัว (เช่น 19,29,99)")
-block3 = st.sidebar.text_input("เลขอั้น 3 ตัว (เช่น 123,456,999)")
+# -------------------------
+# กำหนดค่าตั้งต้น
+# -------------------------
+if "bets" not in st.session_state:
+    st.session_state.bets = []
 
-block2_set = {x.strip().zfill(2) for x in block2.split(",") if x.strip()}
-block3_set = {x.strip().zfill(3) for x in block3.split(",") if x.strip()}
+if "blocked_numbers" not in st.session_state:
+    st.session_state.blocked_numbers = {}
 
-# เพิ่มโพย
-st.header("📝 เพิ่มโพย")
-col1, col2, col3, col4 = st.columns([2,1,1,1])
-with col1:
-    lotto_type = st.selectbox("ประเภท", ["2 ตัวบน","2 ตัวล่าง","3 ตัวเต็ง","3 ตัวโต๊ด"])
-with col2:
-    num = st.text_input("เลข")
-with col3:
-    amount = st.number_input("ยอดซื้อ", min_value=0, value=0)
-with col4:
-    if st.button("➕ เพิ่ม"):
-        if lotto_type.startswith("2"):
-            num = num.zfill(2)
-            status = "อั้น" if num in block2_set else "ปกติ"
+# -------------------------
+# ส่วนกำหนดเลขอั้น
+# -------------------------
+st.sidebar.header("⚙️ ตั้งค่าเลขอั้น")
+blocked_num = st.sidebar.text_input("เลขอั้น (เช่น 19 หรือ 123)")
+blocked_limit = st.sidebar.number_input("ยอดสูงสุดของเลขอั้น", min_value=0, step=10)
+
+if st.sidebar.button("เพิ่มเลขอั้น"):
+    if blocked_num:
+        st.session_state.blocked_numbers[blocked_num] = blocked_limit
+        st.sidebar.success(f"เพิ่มเลขอั้น {blocked_num} (ไม่เกิน {blocked_limit} บาท)")
+
+if st.session_state.blocked_numbers:
+    st.sidebar.subheader("📌 รายการเลขอั้น")
+    for k, v in st.session_state.blocked_numbers.items():
+        st.sidebar.write(f"{k} → {v} บาท")
+
+# -------------------------
+# ฟอร์มรับโพย
+# -------------------------
+st.subheader("📝 เพิ่มโพยใหม่")
+
+with st.form("add_bet"):
+    number = st.text_input("เลข (2 หรือ 3 หลัก)").strip()
+    bet_type = st.selectbox("ประเภท", ["2ตัวบน", "2ตัวล่าง", "3ตัวเต็ง", "3ตัวโต๊ด"])
+    amount = st.number_input("ยอดซื้อ", min_value=1, step=1)
+
+    submitted = st.form_submit_button("เพิ่มโพย")
+
+    if submitted:
+        if not number.isdigit():
+            st.error("❌ ต้องกรอกเป็นตัวเลขเท่านั้น")
         else:
-            num = num.zfill(3)
-            status = "อั้น" if num in block3_set else "ปกติ"
-        new = {"ประเภท": lotto_type, "เลข": num, "ยอดซื้อ": amount, "สถานะ": status, "เวลา": datetime.now()}
-        st.session_state.orders = pd.concat([st.session_state.orders, pd.DataFrame([new])], ignore_index=True)
+            # ตรวจสอบเลขอั้น
+            if number in st.session_state.blocked_numbers:
+                max_limit = st.session_state.blocked_numbers[number]
+                # ยอดที่ซื้อไปแล้ว
+                already = sum(
+                    b["ยอดซื้อ"]
+                    for b in st.session_state.bets
+                    if b["เลข"] == number
+                )
+                if already + amount > max_limit:
+                    st.error(f"❌ เลข {number} เป็นเลขอั้น รับได้อีกไม่เกิน {max_limit - already} บาท")
+                else:
+                    st.session_state.bets.append({"เลข": number, "ประเภท": bet_type, "ยอดซื้อ": amount})
+                    st.success(f"✅ รับโพย {number} ({bet_type}) {amount} บาท")
+            else:
+                # ถ้าไม่ใช่เลขอั้น
+                st.session_state.bets.append({"เลข": number, "ประเภท": bet_type, "ยอดซื้อ": amount})
+                st.success(f"✅ รับโพย {number} ({bet_type}) {amount} บาท")
 
-# แสดงโพย
-st.subheader("📋 โพยทั้งหมด")
-if st.session_state.orders.empty:
-    st.info("ยังไม่มีโพย")
-else:
-    df = st.session_state.orders.groupby(["ประเภท","เลข","สถานะ"], as_index=False).sum()
-    df["หลังหัก%"] = df["ยอดซื้อ"] * (100 - percent) / 100
+# -------------------------
+# ตารางโพยทั้งหมด
+# -------------------------
+if st.session_state.bets:
+    df = pd.DataFrame(st.session_state.bets)
+
+    st.subheader("📊 โพยทั้งหมด")
     st.dataframe(df, use_container_width=True)
 
-    total = df["ยอดซื้อ"].sum()
-    total_net = df["หลังหัก%"].sum()
-    st.metric("ยอดรวมทั้งหมด", f"{total:,.0f} บาท")
-    st.metric(f"หลังหัก {percent}%", f"{total_net:,.0f} บาท")
-    st.download_button("📥 ดาวน์โหลด CSV", df.to_csv(index=False).encode("utf-8-sig"),
-                       "lotto_summary.csv", "text/csv")
+    # รวมโพยเลขซ้ำ
+    st.subheader("🔄 รวมเลขซ้ำ")
+    merged = df.groupby(["เลข", "ประเภท"], as_index=False).sum()
+    st.dataframe(merged, use_container_width=True)
+
+    # สรุปยอดรวม
+    st.subheader("💰 สรุปยอดรวมตามประเภท")
+    summary = merged.groupby("ประเภท")["ยอดซื้อ"].sum()
+    st.write(summary)
+
+    st.subheader("💵 ยอดรวมทั้งหมด")
+    st.success(f"{df['ยอดซื้อ'].sum():,.0f} บาท")
