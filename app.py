@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="โปรแกรมเจ้ามือหวยออนไลน์", layout="wide")
+st.set_page_config(page_title="โปรแกรมเจ้ามือหวย", layout="wide")
 
 st.markdown("<h1 style='text-align: center;'>💸 โปรแกรมเจ้ามือหวยออนไลน์</h1>", unsafe_allow_html=True)
 
