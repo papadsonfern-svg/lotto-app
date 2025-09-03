@@ -33,8 +33,29 @@ with st.sidebar:
         for num, limit in st.session_state.blocked_numbers.items():
             already = sum(b["ยอดซื้อ"] for b in st.session_state.bets if b["เลข"] == num)
             remaining = max(limit - already, 0)
-            blocked_data.append({"เลข": num, "รับสูงสุด": limit, "ซื้อไปแล้ว": already, "รับเพิ่มได้": remaining})
-        st.dataframe(pd.DataFrame(blocked_data))
+            blocked_data.append({
+                "เลข": num,
+                "รับสูงสุด": limit,
+                "ซื้อไปแล้ว": already,
+                "รับเพิ่มได้": remaining
+            })
+        df_blocked = pd.DataFrame(blocked_data)
+
+        # ✅ ใส่สีแดงถ้าเลขเป็นเลขอั้น และถ้าเกินยอด
+        def highlight(val, col_name):
+            if col_name == "เลข":
+                return "color: red; font-weight: bold;"
+            elif col_name == "รับเพิ่มได้" and val <= 0:
+                return "background-color: red; color: white; font-weight: bold;"
+            return ""
+
+        st.dataframe(
+            df_blocked.style.apply(
+                lambda row: [highlight(v, c) for v, c in zip(row, df_blocked.columns)],
+                axis=1
+            ),
+            use_container_width=True
+        )
 
 # -------------------------
 # Layout 3 คอลัมน์
